@@ -30,6 +30,7 @@ class Task(object):
     def get_configure_from_server(self):
         url = f'http://{get_config("address")}/register'
         post_data = {
+            'type': 'nginx-agent',
             'host': self.IP,
             'port': get_config('port'),
         }
