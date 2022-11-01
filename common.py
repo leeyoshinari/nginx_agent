@@ -13,7 +13,7 @@ cfg.read('config.conf', encoding='utf-8')
 
 
 def get_config(key):
-    return cfg.get('agent', key, fallback=None)
+    return cfg.get('server', key, fallback=None)
 
 
 LEVEL = get_config('level')

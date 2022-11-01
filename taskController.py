@@ -5,12 +5,9 @@ import os
 import re
 import time
 import json
-import queue
+import threading
 import traceback
-from concurrent.futures import ThreadPoolExecutor
 import requests
-import redis
-import influxdb
 from common import get_config, logger, get_ip, toTimeStamp
 
 
@@ -18,36 +15,24 @@ class Task(object):
     def __init__(self):
         self.IP = get_ip()
         self.group_key = None
+        self.prefix = ''
         self.start_time = 0
-        self.pattern = 'summary\+(\d+)in.*=(\d+.\d+)/sAvg:(\d+)Min:(\d+)Max:(\d+)Err:(\d+)\(.*Active:(\d+)Started'
-        self.influx_host = '127.0.0.1'
-        self.influx_port = 8086
-        self.influx_username = 'root'
-        self.influx_password = '123456'
-        self.influx_database = 'test'
-        self.redis_host = '127.0.0.1'
-        self.redis_port = 6379
-        self.redis_password = '123456'
-        self.redis_db = 0
-        self.get_configure_from_server()
-
-        self.thread_pool = int(get_config('threadPool'))
+        self.influx_post_url = f'http://{get_config("address")}/influx/batch/write'
+        # log_format  main   '$remote_addr - $remote_user [$time_iso8601] $request_method $request_uri $server_protocol $status $body_bytes_sent $upstream_response_time "$http_referer" "$http_user_agent" "$http_x_forwarded_for"';
+        self.compiler = re.compile(r'(?P<ip>.*?)- - \[(?P<time>.*?)\] (?P<method>.*?) (?P<path>.*?) (?P<protocol>.*?) (?P<status>.*?) (?P<bytes>.*?) (?P<rt>.*?) "(?P<referer>.*?)" "(?P<ua>.*?)"')
         self.access_log = get_config('nginxLogPath')
-        self.monitor_task = queue.Queue()  # FIFO queue
-        self.executor = ThreadPoolExecutor(self.thread_pool)    # thread pool
+        self.get_configure_from_server()
+        if not self.access_log:
+            self.find_nginx_log()
 
-        self.influx_client = None
-        self.redis_client = None
-
-
+        self.parse_log()
 
     def get_configure_from_server(self):
-        url = f'http://{get_config("address")}/monitor/nginx/register/first'
+        url = f'http://{get_config("address")}/register'
         post_data = {
             'host': self.IP,
             'port': get_config('port'),
         }
-
         while True:
             try:
                 res = self.request_post(url, post_data)
@@ -55,69 +40,36 @@ class Task(object):
                 if res.status_code == 200:
                     response_data = json.loads(res.content.decode('unicode_escape'))
                     if response_data['code'] == 0:
-                        self.influx_host = response_data['data']['influx']['host']
-                        self.influx_port = response_data['data']['influx']['port']
-                        self.influx_username = response_data['data']['influx']['username']
-                        self.influx_password = response_data['data']['influx']['password']
-                        self.influx_database = response_data['data']['influx']['database']
-                        self.redis_host = response_data['data']['redis']['host']
-                        self.redis_port = response_data['data']['redis']['port']
-                        self.redis_password = response_data['data']['redis']['password']
-                        self.redis_db = response_data['data']['redis']['db']
+                        self.group_key = 'nginx_' + response_data['data']['groupKey']
+                        self.prefix = response_data['data']['prefix']
                         break
-
                 time.sleep(1)
-
             except:
                 logger.error(traceback.format_exc())
                 time.sleep(1)
 
+    def find_nginx_log(self):
+        res = os.popen("ps -ef|grep nginx |grep master|awk '{print $2}'").read()
+        logger.info(f'nginx pid is: {res}')
+        nginx_pid = res.strip()
+        if nginx_pid:
+            res = os.popen(f'pwdx {nginx_pid}').read()
+            nginx_path = res.strip().split(' ')[-1].strip()
+            self.access_log = os.path.join(os.path.dirname(nginx_path), 'logs', 'access.log')
+        else:
+            logger.error('Nginx is not found ~')
+            raise Exception('Nginx is not found ~')
 
-    def connect_influx(self):
-        self.influx_client = influxdb.InfluxDBClient(self.influx_host, self.influx_port, self.influx_username,
-                                                     self.influx_password, self.influx_database)
-
-
-    def check_status(self, is_run=True):
-        try:
-            res = os.popen('ps -ef|grep jmeter |grep -v grep').readlines()
-            if res and is_run:  # 是否启动成功
-                return True
-            elif not res and not is_run:    # 是否停止成功
-                return True
-            else:
-                return False
-        except:
-            logger.error(traceback.format_exc())
-
-
-
-    def write_to_influx(self, line):
-        d = [json.loads(r) for r in line]
-        data = [sum(r) for r in zip(*d)]
-        line = [{'measurement': 'performance_jmeter_task',
-                 'tags': {'task': str(self.task_id), 'host': 'all'},
-                 'fields': {'c_time': time.strftime("%Y-%m-%d %H:%M:%S"), 'samples': data[0], 'tps': data[1],
-                            'avg_rt': data[2], 'min_rt': data[3], 'max_rt': data[4], 'err': data[5], 'active': data[6]}}]
-        self.influx_client.write_points(line)  # write to database
-
-    def parse_log(self, log_path):
-        while not os.path.exists(log_path):
-            time.sleep(0.5)
+    def parse_log(self):
+        if not os.path.exists(self.access_log):
+            raise Exception(f'Not found nginx log: {self.access_log}')
 
         position = 0
-        with open(log_path, mode='r', encoding='utf-8') as f1:
+        with open(self.access_log, mode='r', encoding='utf-8') as f1:
             while True:
                 line = f1.readline().strip()
-                if 'Summariser: summary +' in line:
-                    logger.debug(f'Nginx - access.log - {self.task_id} - {line}')
-                    c_time = line.split(',')[0].strip()
-                    res = re.findall(self.pattern, line.replace(' ', ''))[0]
-                    logger.debug(res)
-                    if res[-1] == '0':
-                        break
-                else:
-                    self.change_init_TPS()
+                if self.prefix in line:
+                    logger.debug(f'Nginx - access.log -- {line}')
 
                 cur_position = f1.tell()
                 if cur_position == position:
@@ -126,11 +78,19 @@ class Task(object):
                 else:
                     position = cur_position
 
-    def kill_process(self):
-        try:
-            res = os.popen("ps -ef|grep jmeter |grep -v grep |awk '{print $2}' |xargs kill -9").read()
-        except:
-            logger.error(traceback.format_exc())
+    def parse_line(self, line):
+        res = self.compiler.match(line).groups()
+        path = res[3].split('?')[0].strip()
+        if 'PerformanceTest' in res[9]:
+            source = 'test'
+        else:
+            source = 'normal'
+        c_time = res[1].strip('+')[0].replace('T', ' ').strip()
+        rt = float(res[7].split(',')[-1].strip()) if ',' in res[7] else float(res[7].strip())
+        line = [{'measurement': self.group_key, 'tags': {'source': source},
+                 'fields': {'c_time': c_time, 'client': res[0].strip(), 'path': path, 'status': int(res[5]), 'size': int(res[6]), 'rt': rt}}]
+        t = threading.Thread(target=self.request_post, args=(self.influx_post_url, {'data': line},))
+        t.start()
 
 
     def request_post(self, url, post_data):
@@ -138,15 +98,9 @@ class Task(object):
             "Accept": "application/json, text/plain, */*",
             "Accept-Encoding": "gzip, deflate",
             "Content-Type": "application/json; charset=UTF-8"}
-        res = requests.post(url=url, json=post_data, headers=header)
-        logger.debug(url)
-        return res
-
-if __name__ == '__main__':
-    RedisHost = '101.200.52.208'
-    RedisPort = 6369
-    RedisPassword = 'leeyoshi'
-    RedisDB = 1
-    r = redis.Redis(host=RedisHost, port=RedisPort, password=RedisPassword, db=RedisDB, decode_responses=True)
-    print(r.get('123'))
+        try:
+            res = requests.post(url=url, json=post_data, headers=header)
+            return res
+        except:
+            raise
 
