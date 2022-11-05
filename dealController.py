@@ -8,7 +8,7 @@ import json
 import threading
 import traceback
 import requests
-from common import get_config, logger, get_ip, toTimeStamp
+from common import get_config, logger, get_ip
 
 
 class Task(object):
@@ -25,7 +25,8 @@ class Task(object):
         if not self.access_log:
             self.find_nginx_log()
 
-        self.parse_log()
+        t = threading.Thread(target=self.parse_log, args=())
+        t.start()
 
     def get_configure_from_server(self):
         url = f'http://{get_config("address")}/register'
@@ -67,10 +68,11 @@ class Task(object):
 
         position = 0
         with open(self.access_log, mode='r', encoding='utf-8') as f1:
+            line = f1.readlines()   # jump to current newest line, ignore old lines.
             while True:
                 line = f1.readline().strip()
                 if self.prefix in line:
-                    logger.debug(f'Nginx - access.log -- {line}')
+                    logger.info(f'Nginx - access.log -- {line}')
 
                 cur_position = f1.tell()
                 if cur_position == position:
