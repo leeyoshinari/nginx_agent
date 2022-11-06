@@ -71,7 +71,6 @@ class Task(object):
             lines = f1.readlines()   # jump to current newest line, ignore old lines.
             while True:
                 lines = f1.readlines()
-                logger.info(lines)
                 for line in lines:
                     if self.prefix in line:
                         if 'static' in line and '.' in line:
@@ -86,19 +85,24 @@ class Task(object):
                 else:
                     position = cur_position
 
-    def parse_line(self, line):
-        res = self.compiler.match(line).groups()
-        path = res[3].split('?')[0].strip()
-        if 'PerformanceTest' in res[9]:
-            source = 'test'
-        else:
-            source = 'normal'
-        c_time = res[1].strip('+')[0].replace('T', ' ').strip()
-        rt = float(res[7].split(',')[-1].strip()) if ',' in res[7] else float(res[7].strip())
-        line = [{'measurement': self.group_key, 'tags': {'source': source},
-                 'fields': {'c_time': c_time, 'client': res[0].strip(), 'path': path, 'status': int(res[5]), 'size': int(res[6]), 'rt': rt}}]
-        t = threading.Thread(target=self.request_post, args=(self.influx_post_url, {'data': line},))
-        t.start()
+    def parse_line(self, lines):
+        for line in lines:
+            if self.prefix in line:
+                if 'static' in line and '.' in line:
+                    continue
+                else:
+                    logger.debug(f'Nginx - access.log -- {line}')
+                    res = self.compiler.match(line).groups()
+                    path = res[3].split('?')[0].strip()
+                    if 'PerformanceTest' in res[9]:
+                        source = 'test'
+                    else:
+                        source = 'normal'
+                    c_time = res[1].strip('+')[0].replace('T', ' ').strip()
+                    rt = float(res[7].split(',')[-1].strip()) if ',' in res[7] else float(res[7].strip())
+                    line = [{'measurement': self.group_key, 'tags': {'source': source},
+                             'fields': {'c_time': c_time, 'client': res[0].strip(), 'path': path, 'status': int(res[5]), 'size': int(res[6]), 'rt': rt}}]
+                    logger.info(line)
 
 
     def request_post(self, url, post_data):
