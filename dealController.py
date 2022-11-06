@@ -71,19 +71,13 @@ class Task(object):
             lines = f1.readlines()   # jump to current newest line, ignore old lines.
             while True:
                 lines = f1.readlines()
-                for line in lines:
-                    if self.prefix in line:
-                        if 'static' in line and '.' in line:
-                            continue
-                        else:
-                            logger.info(f'Nginx - access.log -- {line}')
-
                 cur_position = f1.tell()
                 if cur_position == position:
                     time.sleep(0.2)
                     continue
                 else:
                     position = cur_position
+                    self.parse_line(lines)
 
     def parse_line(self, lines):
         for line in lines:
