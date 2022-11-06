@@ -68,11 +68,16 @@ class Task(object):
 
         position = 0
         with open(self.access_log, mode='r', encoding='utf-8') as f1:
-            line = f1.readlines()   # jump to current newest line, ignore old lines.
+            lines = f1.readlines()   # jump to current newest line, ignore old lines.
             while True:
-                line = f1.readline().strip()
-                if self.prefix in line:
-                    logger.info(f'Nginx - access.log -- {line}')
+                lines = f1.readlines()
+                logger.info(lines)
+                for line in lines:
+                    if self.prefix in line:
+                        if 'static' in line and '.' in line:
+                            continue
+                        else:
+                            logger.info(f'Nginx - access.log -- {line}')
 
                 cur_position = f1.tell()
                 if cur_position == position:
