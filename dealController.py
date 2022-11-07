@@ -80,6 +80,7 @@ class Task(object):
                     self.parse_line(lines)
 
     def parse_line(self, lines):
+        all_line = []
         for line in lines:
             if self.prefix in line:
                 if 'static' in line and '.' in line:
@@ -87,16 +88,19 @@ class Task(object):
                 else:
                     logger.debug(f'Nginx - access.log -- {line}')
                     res = self.compiler.match(line).groups()
+                    logger.debug(res)
                     path = res[3].split('?')[0].strip()
                     if 'PerformanceTest' in res[9]:
                         source = 'test'
                     else:
                         source = 'normal'
-                    c_time = res[1].strip('+')[0].replace('T', ' ').strip()
+                    c_time = res[1].split('+')[0].replace('T', ' ').strip()
                     rt = float(res[7].split(',')[-1].strip()) if ',' in res[7] else float(res[7].strip())
-                    line = [{'measurement': self.group_key, 'tags': {'source': source},
-                             'fields': {'c_time': c_time, 'client': res[0].strip(), 'path': path, 'status': int(res[5]), 'size': int(res[6]), 'rt': rt}}]
-                    logger.info(line)
+                    all_line.append({'measurement': self.group_key, 'tags': {'source': source},
+                             'fields': {'c_time': c_time, 'client': res[0].strip(), 'path': path, 'status': int(res[5]), 'size': int(res[6]), 'rt': rt}})
+        if all_line:
+            logger.debug(all_line)
+            _  = self.request_post(self.influx_post_url, {'data': all_line})
 
 
     def request_post(self, url, post_data):
