@@ -51,9 +51,9 @@ class Task(object):
                 time.sleep(1)
 
     def find_nginx_log(self):
-        res = os.popen("ps -ef|grep nginx |grep master|awk '{print $2}'").read()
-        logger.info(f'nginx pid is: {res}')
+        res = os.popen("ps -ef|grep nginx |grep -v grep |grep master|awk '{print $2}'").read()
         nginx_pid = res.strip()
+        logger.info(f'nginx pid is: {nginx_pid}')
         if nginx_pid:
             res = os.popen(f'pwdx {nginx_pid}').read()
             nginx_path = res.strip().split(' ')[-1].strip()
