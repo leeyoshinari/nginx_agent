@@ -91,13 +91,15 @@ class Task(object):
                     logger.debug(res)
                     path = res[3].split('?')[0].strip()
                     if 'PerformanceTest' in res[9]:
-                        source = 'test'
+                        source = 'PerformanceTest'
                     else:
-                        source = 'normal'
+                        source = 'Normal'
                     c_time = res[1].split('+')[0].replace('T', ' ').strip()
                     rt = float(res[7].split(',')[-1].strip()) if ',' in res[7] else float(res[7].strip())
-                    all_line.append({'measurement': self.group_key, 'tags': {'source': source},
-                             'fields': {'c_time': c_time, 'client': res[0].strip(), 'path': path, 'status': int(res[5]), 'size': int(res[6]), 'rt': rt}})
+                    error = 0 if int(res[5]) < 400 else 1
+                    all_line.append({'measurement': self.group_key, 'tags': {'source': source, 'path': path},
+                             'fields': {'c_time': c_time, 'client': res[0].strip(), 'status': int(res[5]),
+                                        'size': int(res[6]), 'rt': rt, 'error': error}})
         if all_line:
             logger.debug(all_line)
             _  = self.request_post(self.influx_post_url, {'data': all_line})
