@@ -63,6 +63,7 @@ class Task(object):
             raise Exception('Nginx is not found ~')
 
     def parse_log(self):
+        logger.info(self.access_log)
         if not os.path.exists(self.access_log):
             raise Exception(f'Not found nginx log: {self.access_log}')
 
@@ -70,14 +71,17 @@ class Task(object):
         with open(self.access_log, mode='r', encoding='utf-8') as f1:
             lines = f1.readlines()   # jump to current newest line, ignore old lines.
             while True:
-                lines = f1.readlines()
-                cur_position = f1.tell()
-                if cur_position == position:
-                    time.sleep(0.2)
-                    continue
-                else:
-                    position = cur_position
-                    self.parse_line(lines)
+                try:
+                    lines = f1.readlines()
+                    cur_position = f1.tell()
+                    if cur_position == position:
+                        time.sleep(0.2)
+                        continue
+                    else:
+                        position = cur_position
+                        self.parse_line(lines)
+                except:
+                    logger.error(traceback.format_exc())
 
     def parse_line(self, lines):
         all_line = []
@@ -95,7 +99,11 @@ class Task(object):
                     else:
                         source = 'Normal'
                     c_time = res[1].split('+')[0].replace('T', ' ').strip()
-                    rt = float(res[7].split(',')[-1].strip()) if ',' in res[7] else float(res[7].strip())
+                    try:
+                        rt = float(res[7].split(',')[-1].strip()) if ',' in res[7] else float(res[7].strip())
+                    except ValueError:
+                        logger.error(f'parse error: {line}')
+                        rt = 0.0
                     error = 0 if int(res[5]) < 400 else 1
                     all_line.append({'measurement': self.group_key, 'tags': {'source': source, 'path': path},
                              'fields': {'c_time': c_time, 'client': res[0].strip(), 'status': int(res[5]),
