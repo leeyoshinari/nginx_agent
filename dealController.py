@@ -58,6 +58,8 @@ class Task(object):
             res = os.popen(f'pwdx {nginx_pid}').read()
             nginx_path = res.strip().split(' ')[-1].strip()
             self.access_log = os.path.join(os.path.dirname(nginx_path), 'logs', 'access.log')
+            if not os.path.exists(self.access_log):
+                raise Exception(f'Not found nginx log: {self.access_log}')
         else:
             logger.error('Nginx is not found ~')
             raise Exception('Nginx is not found ~')
@@ -65,6 +67,7 @@ class Task(object):
     def parse_log(self):
         logger.info(self.access_log)
         if not os.path.exists(self.access_log):
+            logger.error(f'Not found nginx log: {self.access_log}')
             raise Exception(f'Not found nginx log: {self.access_log}')
 
         position = 0
