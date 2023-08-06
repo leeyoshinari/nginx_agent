@@ -98,7 +98,7 @@ class Task(object):
         while True:
             try:
                 res = request_post(url, post_data)
-                logger.debug(f"The result of registration is {res.content.decode('unicode_escape')}")
+                logger.debug(f"The result of registration is {res}")
                 self.redis_host = res['redis']['host']
                 self.redis_port = res['redis']['port']
                 self.redis_password = res['redis']['password']
@@ -173,7 +173,7 @@ class Task(object):
 
     def write_redis(self, data):
         try:
-            self.redis_client.xadd(self.influx_stream, {'nginx': [data]})
+            self.redis_client.xadd(self.influx_stream, {'data': json.dumps([data])})
         except:
             logger.error(traceback.format_exc())
 
