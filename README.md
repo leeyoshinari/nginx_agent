@@ -25,7 +25,7 @@ It can be only used with [MyPlatform](https://github.com/leeyoshinari/MyPlatform
 4. Package. Using `pyinstaller` to package python code. 
 - (1) Enter folder, run:<br>
     ```shell
-    pyinstaller -F server.py -p dealController.py -p common.py -p __init__.py --hidden-import dealController --hidden-import common
+    pyinstaller -F server.py -p __init__.py
     ```
 - (2) Copy `config.conf` to the `dist` folder, cmd: `cp config.conf dist/`
 - (3) Enter `dist` folder, zip files, cmd: `zip nginx_agent.zip server config.conf`
