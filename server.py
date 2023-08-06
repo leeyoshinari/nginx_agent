@@ -105,6 +105,7 @@ class Task(object):
                 self.redis_db = res['redis']['db']
                 self.group_key = 'nginx_' + res['groupKey']
                 self.prefix = res['prefix']
+                time.sleep(1)
                 break
             except:
                 logger.error(traceback.format_exc())
@@ -188,7 +189,6 @@ def request_post(url, post_data):
         logger.info(f"The result of request is {res.content.decode('unicode_escape')}")
         if res.status_code == 200:
             response_data = json.loads(res.content.decode('unicode_escape'))
-            del res
             if response_data['code'] == 0:
                 return response_data['data']
             else:
