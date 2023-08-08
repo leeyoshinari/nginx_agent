@@ -53,7 +53,8 @@ def get_ip():
         if get_config('host'):
             IP = get_config('host')
         else:
-            result = os.popen("hostname -I |awk '{print $1}'").readlines()
+            with os.popen("hostname -I |awk '{print $1}'") as p:
+                result = p.readlines()
             logger.debug(result)
             if result:
                 IP = result[0].strip()
@@ -84,7 +85,7 @@ class Task(object):
             self.find_nginx_log()
 
         self.redis_client = redis.StrictRedis(host=self.redis_host, port=self.redis_port, password=self.redis_password,
-                                    db=self.redis_db, decode_responses=True)
+                                              db=self.redis_db, decode_responses=True)
         t = threading.Thread(target=self.parse_log, args=())
         t.start()
 
@@ -112,11 +113,12 @@ class Task(object):
                 time.sleep(1)
 
     def find_nginx_log(self):
-        res = os.popen("ps -ef|grep nginx |grep -v grep |grep master|awk '{print $2}'").read()
-        nginx_pid = res.strip()
+        with os.popen("ps -ef|grep nginx |grep -v grep |grep master|awk '{print $2}'") as p:
+            nginx_pid = p.read().strip()
         logger.info(f'nginx pid is: {nginx_pid}')
         if nginx_pid:
-            res = os.popen(f'pwdx {nginx_pid}').read()
+            with os.popen(f'pwdx {nginx_pid}') as p:
+                res = p.read()
             nginx_path = res.strip().split(' ')[-1].strip()
             self.access_log = os.path.join(os.path.dirname(nginx_path), 'logs', 'access.log')
             if not os.path.exists(self.access_log):
@@ -174,7 +176,7 @@ class Task(object):
 
     def write_redis(self, data):
         try:
-            self.redis_client.xadd(self.influx_stream, {'data': json.dumps([data])})
+            self.redis_client.xadd(self.influx_stream, {'data': json.dumps([data])}, maxlen=100)
         except:
             logger.error(traceback.format_exc())
 
@@ -201,6 +203,7 @@ def request_post(url, post_data):
 
 if __name__ == '__main__':
     task = Task()
+    time.sleep(2)
     PID = os.getpid()
     with open('pid', 'w', encoding='utf-8') as f:
         f.write(str(PID))
